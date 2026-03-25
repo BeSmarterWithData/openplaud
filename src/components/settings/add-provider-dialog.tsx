@@ -34,6 +34,12 @@ const providerPresets = [
         defaultModel: "whisper-1",
     },
     {
+        name: "Deepgram",
+        baseUrl: "https://api.deepgram.com",
+        placeholder: "Your Deepgram API key",
+        defaultModel: "nova-3",
+    },
+    {
         name: "Groq",
         baseUrl: "https://api.groq.com/openai/v1",
         placeholder: "gsk_...",

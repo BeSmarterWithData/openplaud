@@ -38,41 +38,104 @@ export interface TranscribeResult {
     detectedLanguage: string | null;
 }
 
+interface DeepgramWord {
+    word: string;
+    start: number;
+    end: number;
+    speaker: number;
+    punctuated_word: string;
+}
+
+interface DeepgramResponse {
+    results: {
+        channels: Array<{
+            alternatives: Array<{
+                transcript: string;
+                words: DeepgramWord[];
+            }>;
+        }>;
+    };
+}
+
 /**
- * Uses an LLM to identify and label different speakers in a transcription.
- * Returns the reformatted text with speaker labels (Speaker 1, Speaker 2, etc.)
+ * Convert audio to WAV format for Deepgram compatibility.
+ * Deepgram rejects raw Ogg/Opus from Plaud devices.
  */
-async function identifySpeakers(
-    openai: OpenAI,
-    model: string,
-    rawText: string,
+function convertToWav(audioBytes: Uint8Array): Buffer {
+    const tempDir = mkdtempSync(join(tmpdir(), "openplaud-dg-"));
+    const inputPath = join(tempDir, "input.audio");
+    const outputPath = join(tempDir, "output.wav");
+
+    try {
+        writeFileSync(inputPath, audioBytes);
+        execSync(
+            `ffmpeg -y -i "${inputPath}" -ac 1 -ar 16000 "${outputPath}"`,
+            { stdio: "pipe", timeout: 120000 },
+        );
+        return readFileSync(outputPath);
+    } finally {
+        try {
+            unlinkSync(inputPath);
+        } catch {}
+        try {
+            unlinkSync(outputPath);
+        } catch {}
+    }
+}
+
+/**
+ * Transcribe using Deepgram with speaker diarization.
+ * Groups words by speaker and formats as "Speaker N: text"
+ */
+async function transcribeWithDeepgram(
+    apiKey: string,
+    audioBytes: Uint8Array,
 ): Promise<string> {
-    const response = await openai.chat.completions.create({
-        model,
-        messages: [
-            {
-                role: "system",
-                content: `You are a transcription formatter that identifies different speakers in a conversation. Your job is to reformat a raw transcription by adding speaker labels.
+    // Convert to WAV for reliable Deepgram compatibility
+    const wavBuffer = convertToWav(audioBytes);
 
-Rules:
-- Label speakers as "Speaker 1", "Speaker 2", etc. based on conversational cues (turn-taking, responses, different perspectives, questions vs answers)
-- If you can identify a speaker's name from the conversation (e.g., "Thanks, Michael"), use their name instead of "Speaker N"
-- Format each speaker turn on its own line as: "**Speaker Name:** text"
-- Preserve ALL original text exactly — do not summarize, shorten, or rephrase anything
-- If the recording appears to be a single speaker (monologue, lecture, presentation), label them as "Speaker" or by name if mentioned
-- Group consecutive sentences from the same speaker together
-- Return ONLY the reformatted transcription, nothing else`,
+    const response = await fetch(
+        "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&diarize=true&paragraphs=true&punctuate=true",
+        {
+            method: "POST",
+            headers: {
+                Authorization: `Token ${apiKey}`,
+                "Content-Type": "audio/wav",
             },
-            {
-                role: "user",
-                content: `Reformat this transcription with speaker labels:\n\n${rawText}`,
-            },
-        ],
-        temperature: 0.1,
-        max_completion_tokens: 16384,
-    });
+            body: wavBuffer as unknown as BodyInit,
+        },
+    );
 
-    return response.choices[0]?.message?.content?.trim() || rawText;
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Deepgram API error (${response.status}): ${errText}`);
+    }
+
+    const data = (await response.json()) as DeepgramResponse;
+    const words = data.results?.channels?.[0]?.alternatives?.[0]?.words || [];
+
+    if (words.length === 0) {
+        return data.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
+    }
+
+    // Group consecutive words by speaker
+    const segments: Array<{ speaker: number; text: string }> = [];
+    for (const word of words) {
+        const text = word.punctuated_word || word.word;
+        if (
+            segments.length === 0 ||
+            segments[segments.length - 1].speaker !== word.speaker
+        ) {
+            segments.push({ speaker: word.speaker, text });
+        } else {
+            segments[segments.length - 1].text += ` ${text}`;
+        }
+    }
+
+    // Format with speaker labels
+    return segments
+        .map((seg) => `Speaker ${seg.speaker + 1}: ${seg.text}`)
+        .join("\n\n");
 }
 
 export async function transcribeRecording(
@@ -107,10 +170,6 @@ export async function transcribeRecording(
     }
 
     const apiKey = decrypt(creds.apiKey);
-    const openai = new OpenAI({
-        apiKey,
-        baseURL: creds.baseUrl || undefined,
-    });
 
     // Download audio
     const storage = await createUserStorageProvider(userId);
@@ -147,64 +206,54 @@ export async function transcribeRecording(
         extension = isOgg ? ".ogg" : ".mp3";
     }
 
-    const audioFile = new File(
-        [audioBytes],
-        `${recording.filename}${extension}`,
-        { type: contentType },
-    );
+    let text: string;
+    let detectedLanguage: string | null = null;
+    const isDeepgram =
+        creds.provider.toLowerCase() === "deepgram" ||
+        (creds.baseUrl?.includes("deepgram") ?? false);
 
-    const model = creds.defaultModel || "whisper-1";
-    const isGpt4o = model.includes("gpt-4o");
-
-    const transcription = await openai.audio.transcriptions.create({
-        file: audioFile,
-        model,
-        ...(isGpt4o ? {} : { response_format: "verbose_json" }),
-    });
-
-    type VerboseTranscription = { text: string; language?: string | null };
-
-    const rawText =
-        typeof transcription === "string"
-            ? transcription
-            : (transcription as VerboseTranscription).text;
-
-    const detectedLanguage =
-        typeof transcription === "string" || isGpt4o
-            ? null
-            : (transcription as VerboseTranscription).language || null;
-
-    // Post-process: identify speakers using an LLM
-    let text = rawText;
-    try {
-        // Get enhancement credentials (chat model) for speaker identification
-        const [enhanceCreds] = await db
-            .select()
-            .from(apiCredentials)
-            .where(
-                and(
-                    eq(apiCredentials.userId, userId),
-                    eq(apiCredentials.isDefaultEnhancement, true),
-                ),
-            )
-            .limit(1);
-
-        const speakerCreds = enhanceCreds || creds;
-        const speakerApiKey = decrypt(speakerCreds.apiKey);
-        const speakerClient = new OpenAI({
-            apiKey: speakerApiKey,
-            baseURL: speakerCreds.baseUrl || undefined,
+    if (isDeepgram) {
+        // Use Deepgram with speaker diarization
+        console.log(
+            `Transcribing ${recording.filename} with Deepgram (diarization enabled), key starts: ${apiKey.substring(0, 6)}...`,
+        );
+        text = await transcribeWithDeepgram(apiKey, audioBytes);
+    } else {
+        // Use OpenAI-compatible API (Whisper, gpt-4o-transcribe, etc.)
+        const openai = new OpenAI({
+            apiKey,
+            baseURL: creds.baseUrl || undefined,
         });
 
-        let speakerModel = speakerCreds.defaultModel || "gpt-4o-mini";
-        if (speakerModel.includes("whisper")) {
-            speakerModel = "gpt-4o-mini";
-        }
+        const audioFile = new File(
+            [audioBytes],
+            `${recording.filename}${extension}`,
+            { type: contentType },
+        );
 
-        console.log(`Identifying speakers for ${recording.filename}...`);
-        text = await identifySpeakers(speakerClient, speakerModel, rawText);
-    } catch (e) {
-        console.warn("Speaker identification failed, using raw text:", e);
+        const model = creds.defaultModel || "whisper-1";
+        const isGpt4o = model.includes("gpt-4o");
+
+        const transcription = await openai.audio.transcriptions.create({
+            file: audioFile,
+            model,
+            ...(isGpt4o ? {} : { response_format: "verbose_json" }),
+        });
+
+        type VerboseTranscription = {
+            text: string;
+            language?: string | null;
+        };
+
+        text =
+            typeof transcription === "string"
+                ? transcription
+                : (transcription as VerboseTranscription).text;
+
+        detectedLanguage =
+            typeof transcription === "string" || isGpt4o
+                ? null
+                : (transcription as VerboseTranscription).language || null;
     }
 
     // Save (upsert)
@@ -222,7 +271,8 @@ export async function transcribeRecording(
                 detectedLanguage,
                 transcriptionType: "server",
                 provider: creds.provider,
-                model,
+                model:
+                    creds.defaultModel || (isDeepgram ? "nova-3" : "whisper-1"),
             })
             .where(eq(transcriptions.id, existing.id));
     } else {
@@ -233,7 +283,7 @@ export async function transcribeRecording(
             detectedLanguage,
             transcriptionType: "server",
             provider: creds.provider,
-            model,
+            model: creds.defaultModel || (isDeepgram ? "nova-3" : "whisper-1"),
         });
     }
 
