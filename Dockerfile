@@ -28,6 +28,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Install ffmpeg for audio compression (needed for large files > 25MB)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 # Copy Next.js standalone output + public files
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./

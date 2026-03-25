@@ -1,5 +1,5 @@
 /**
- * AI prompt types for title generation
+ * AI prompt types for recording analysis (titles, summaries, action items, key points)
  */
 
 export type PromptPreset =

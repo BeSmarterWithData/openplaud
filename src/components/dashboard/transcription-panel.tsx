@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Languages, Sparkles } from "lucide-react";
+import { FileText, Languages, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Recording } from "@/types/recording";
@@ -31,16 +31,19 @@ export function TranscriptionPanel({
                         <FileText className="w-5 h-5" />
                         Transcription
                     </CardTitle>
-                    {!transcription?.text && !isTranscribing && (
+                    {!isTranscribing && (
                         <Button
                             onClick={onTranscribe}
                             size="sm"
+                            variant={
+                                transcription?.text ? "outline" : "default"
+                            }
                             disabled={isTranscribing}
                         >
-                            {isTranscribing ? (
+                            {transcription?.text ? (
                                 <>
-                                    <Sparkles className="w-4 h-4 mr-2 animate-pulse" />
-                                    Transcribing...
+                                    <RefreshCw className="w-4 h-4 mr-2" />
+                                    Re-transcribe
                                 </>
                             ) : (
                                 <>
@@ -85,13 +88,9 @@ export function TranscriptionPanel({
                 ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                         <FileText className="w-12 h-12 text-muted-foreground mb-4" />
-                        <p className="text-sm text-muted-foreground mb-4">
+                        <p className="text-sm text-muted-foreground">
                             No transcription available
                         </p>
-                        <Button onClick={onTranscribe} size="sm">
-                            <Sparkles className="w-4 h-4 mr-2" />
-                            Generate Transcription
-                        </Button>
                     </div>
                 )}
             </CardContent>

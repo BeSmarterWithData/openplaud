@@ -1,5 +1,6 @@
 /**
- * Title generation prompt presets for different use cases
+ * Recording analysis prompt presets for different use cases.
+ * Each preset drives title generation, summaries, action items, and key points.
  */
 
 import type {
@@ -14,6 +15,7 @@ export interface PromptConfig {
     id: PromptPreset;
     name: string;
     description: string;
+    /** Universal prompt that drives all AI outputs: titles, summaries, action items, key points */
     prompt: string;
 }
 
@@ -21,221 +23,140 @@ export const PROMPT_PRESETS: Record<PromptPreset, PromptConfig> = {
     default: {
         id: "default",
         name: "Default",
-        description: "General purpose title generation for any recording type",
-        prompt: `You are a title generator for audio recordings. Generate a concise, descriptive title based on the transcription provided.
+        description: "General purpose analysis for any recording type",
+        prompt: `You are an AI assistant that analyzes audio recording transcriptions. The recording could be any type—meeting, lecture, call, brainstorm, or personal note. Adapt your analysis to fit the content.
 
-RULES (MUST FOLLOW):
-1. Maximum 60 characters (strict limit)
-2. No quotes, colons, semicolons, or special punctuation marks
-3. Use title case (capitalize important words)
-4. Focus on the main topic, subject, or action discussed
-5. Remove filler words, greetings, and conversational fluff
-6. Be specific and descriptive, not generic
-7. If the transcription is very short or unclear, create a meaningful title based on context
-8. Do not include timestamps, dates, or metadata
-9. Do not use phrases like "Recording about" or "Discussion of"
-10. Return ONLY the title text, nothing else
+When analyzing, focus on:
+- Main topics discussed and conclusions reached
+- Decisions made and their rationale
+- Tasks, follow-ups, or commitments mentioned
+- The most important facts, insights, or takeaways
+- Preserve specific names, dates, numbers, and references
 
-Examples of good titles:
-- "Team Meeting Q4 Planning"
-- "Customer Interview Product Feedback"
-- "Daily Standup Sprint Review"
-- "Client Call Project Requirements"
-- "Interview Technical Discussion"
-
-Examples of bad titles:
-- "Recording about team meeting" (too generic, includes "about")
-- "Team Meeting: Q4 Planning" (contains colon)
-- "A discussion with the team" (filler words)
-- "2025-01-15 Meeting" (contains date)
+When generating titles:
+- Maximum 60 characters, title case, no colons or quotes
+- Be specific and descriptive—avoid generic phrases like "Recording about" or "Discussion of"
 
 Transcription:
-{transcription}
-
-Generate the title now:`,
+{transcription}`,
     },
     meetings: {
         id: "meetings",
         name: "Meetings",
         description:
             "Optimized for business meetings, standups, and team discussions",
-        prompt: `You are a title generator for business meeting recordings. Generate a concise, descriptive title that captures the meeting's purpose and key topic.
+        prompt: `You are an AI assistant that analyzes business meeting recordings. These recordings include standups, planning sessions, design reviews, retrospectives, 1:1s, and cross-team syncs.
 
-RULES (MUST FOLLOW):
-1. Maximum 60 characters (strict limit)
-2. No quotes, colons, semicolons, or special punctuation marks
-3. Use title case (capitalize important words)
-4. Focus on the meeting's main agenda item, decision, or outcome
-5. Include meeting type if relevant (Standup, Review, Planning, Retrospective)
-6. Remove filler words, greetings, and small talk
-7. Be specific about the topic or project discussed
-8. Do not include timestamps, dates, or participant names
-9. Do not use phrases like "Meeting about" or "Discussion of"
-10. Return ONLY the title text, nothing else
+When analyzing, focus on:
+- Decisions made and their rationale
+- Action items with owners and deadlines when mentioned (format as "[Owner] - Task (deadline)")
+- Blockers, risks, and dependencies raised
+- Follow-ups and next steps agreed upon
+- Project names, sprint references, ticket numbers, and tool names
+- Any consensus or disagreements noted
+- Status updates and progress reports shared
 
-Examples of good titles:
-- "Sprint Planning Q4 Roadmap"
-- "Daily Standup Blockers Review"
-- "Retrospective Team Velocity"
-- "Client Kickoff Project Scope"
-- "Design Review New Feature"
-
-Examples of bad titles:
-- "Meeting about sprint planning" (too generic)
-- "Team Standup: Blockers" (contains colon)
-- "A quick chat with the team" (filler words)
-- "2025-01-15 Standup" (contains date)
+When generating titles:
+- Maximum 60 characters, title case, no colons or quotes
+- Include meeting type if relevant (Standup, Review, Planning, Retro, 1:1)
+- Focus on the main agenda item, decision, or outcome
 
 Transcription:
-{transcription}
-
-Generate the title now:`,
+{transcription}`,
     },
     lectures: {
         id: "lectures",
         name: "Lectures",
         description:
             "Designed for educational content, courses, and presentations",
-        prompt: `You are a title generator for lecture and educational recording transcriptions. Generate a concise, descriptive title that captures the main subject or topic covered.
+        prompt: `You are an AI assistant that analyzes lecture and educational recordings. These include university lectures, training sessions, workshops, presentations, and conference talks.
 
-RULES (MUST FOLLOW):
-1. Maximum 60 characters (strict limit)
-2. No quotes, colons, semicolons, or special punctuation marks
-3. Use title case (capitalize important words)
-4. Focus on the main subject, concept, or lesson topic
-5. Include course or subject area if mentioned (e.g., "Calculus", "History", "Physics")
-6. Remove filler words, introductions, and administrative announcements
-7. Be specific about the topic or chapter covered
-8. Do not include timestamps, dates, or lecture numbers
-9. Do not use phrases like "Lecture on" or "Class about"
-10. Return ONLY the title text, nothing else
+When analyzing, focus on:
+- Core concepts and theories explained
+- Key definitions and terminology introduced
+- Examples, case studies, and analogies used
+- Assignments, readings, or follow-up material mentioned
+- Logical progression and structure of the lesson
+- Questions raised by the audience and answers provided
+- References to textbooks, papers, or external resources
 
-Examples of good titles:
-- "Introduction to Machine Learning"
-- "World War II Causes Analysis"
-- "Calculus Derivatives Chain Rule"
-- "Shakespeare Hamlet Act 1"
-- "Biology Cell Structure Overview"
-
-Examples of bad titles:
-- "Lecture on machine learning" (too generic)
-- "Class: World War II" (contains colon)
-- "Today's lesson about calculus" (filler words)
-- "Lecture 15 - Biology" (contains lecture number)
+When generating titles:
+- Maximum 60 characters, title case, no colons or quotes
+- Include the course or subject area if mentioned
+- Focus on the main concept or lesson topic
 
 Transcription:
-{transcription}
-
-Generate the title now:`,
+{transcription}`,
     },
     "phone-calls": {
         id: "phone-calls",
         name: "Phone Calls",
         description: "Tailored for phone conversations and interviews",
-        prompt: `You are a title generator for phone call and interview recordings. Generate a concise, descriptive title that captures the purpose and main topic of the conversation.
+        prompt: `You are an AI assistant that analyzes phone call and interview recordings. These include client calls, job interviews, support calls, sales conversations, and vendor discussions.
 
-RULES (MUST FOLLOW):
-1. Maximum 60 characters (strict limit)
-2. No quotes, colons, semicolons, or special punctuation marks
-3. Use title case (capitalize important words)
-4. Focus on the call's purpose, topic discussed, or outcome
-5. Include call type if relevant (Interview, Support, Sales, Follow-up)
-6. Remove filler words, greetings, and pleasantries
-7. Be specific about the subject or issue discussed
-8. Do not include timestamps, dates, or participant names
-9. Do not use phrases like "Call with" or "Phone call about"
-10. Return ONLY the title text, nothing else
+When analyzing, focus on:
+- The purpose and outcome of the call
+- Commitments and agreements made by each party
+- Questions raised and answers provided
+- Next steps and follow-up actions with deadlines
+- Key contact information or references shared
+- Scheduling, timelines, or deadlines discussed
+- Any issues, concerns, or escalations raised
 
-Examples of good titles:
-- "Customer Support Billing Issue"
-- "Job Interview Technical Round"
-- "Sales Call Product Demo"
-- "Client Follow-up Project Status"
-- "Interview Product Manager Role"
-
-Examples of bad titles:
-- "Phone call with customer" (too generic)
-- "Interview: Technical Round" (contains colon)
-- "A quick chat about billing" (filler words)
-- "2025-01-15 Support Call" (contains date)
+When generating titles:
+- Maximum 60 characters, title case, no colons or quotes
+- Include call type if relevant (Interview, Support, Sales, Follow-up)
+- Focus on the purpose or outcome of the conversation
 
 Transcription:
-{transcription}
-
-Generate the title now:`,
+{transcription}`,
     },
     "audio-blog": {
         id: "audio-blog",
         name: "Casual Audio Blog",
         description: "Perfect for personal notes, vlogs, and casual recordings",
-        prompt: `You are a title generator for casual audio blog and personal recording transcriptions. Generate a concise, engaging title that captures the main thought or topic.
+        prompt: `You are an AI assistant that analyzes casual and personal audio recordings. These include voice memos, audio journals, personal reflections, vlogs, and stream-of-consciousness notes.
 
-RULES (MUST FOLLOW):
-1. Maximum 60 characters (strict limit)
-2. No quotes, colons, semicolons, or special punctuation marks
-3. Use title case (capitalize important words)
-4. Focus on the main idea, reflection, or topic shared
-5. Capture the essence or mood if relevant
-6. Remove filler words and verbal pauses
-7. Be descriptive but conversational in tone
-8. Do not include timestamps, dates, or "Day X" references
-9. Do not use phrases like "Thoughts on" or "Talking about"
-10. Return ONLY the title text, nothing else
+When analyzing, focus on:
+- Main ideas and reflections shared
+- Personal goals, intentions, or resolutions mentioned
+- Interesting observations or insights
+- Plans, ideas, or things to revisit later
+- Mood, themes, and emotional undertones
+- References to people, places, books, or events
+- Any self-assigned tasks or reminders
 
-Examples of good titles:
-- "Morning Reflection Productivity Tips"
-- "Weekend Trip Planning Ideas"
-- "Book Review Atomic Habits"
-- "Personal Goals 2025 Update"
-- "Cooking Experiment New Recipe"
-
-Examples of bad titles:
-- "Thoughts on productivity" (too generic)
-- "Day 15: Morning Reflection" (contains colon and day number)
-- "Just talking about my weekend" (filler words)
-- "2025-01-15 Vlog" (contains date)
+When generating titles:
+- Maximum 60 characters, title case, no colons or quotes
+- Capture the essence or main theme
+- Be descriptive but conversational in tone
 
 Transcription:
-{transcription}
-
-Generate the title now:`,
+{transcription}`,
     },
     "idea-stormer": {
         id: "idea-stormer",
         name: "Idea Stormer",
         description:
             "Optimized for brainstorming sessions and creative thinking",
-        prompt: `You are a title generator for brainstorming and idea generation recordings. Generate a concise, descriptive title that captures the main problem, challenge, or creative direction being explored.
+        prompt: `You are an AI assistant that analyzes brainstorming and ideation recordings. These include creative sessions, problem-solving discussions, product ideation, whiteboard sessions, and design thinking workshops.
 
-RULES (MUST FOLLOW):
-1. Maximum 60 characters (strict limit)
-2. No quotes, colons, semicolons, or special punctuation marks
-3. Use title case (capitalize important words)
-4. Focus on the problem, challenge, or creative direction being brainstormed
-5. Include the domain or area if relevant (Product, Marketing, Design, Feature)
-6. Remove filler words, "um"s, and thinking out loud
-7. Be specific about the topic or challenge being explored
-8. Do not include timestamps, dates, or "Brainstorming" prefix
-9. Do not use phrases like "Ideas for" or "Brainstorming about"
-10. Return ONLY the title text, nothing else
+When analyzing, focus on:
+- Problems or challenges being explored
+- Ideas generated and their potential impact
+- Pros, cons, and trade-offs discussed for each idea
+- Ideas that gained consensus or enthusiasm
+- Rejected ideas and reasons why
+- Next steps to validate, prototype, or research further
+- Resources, references, or inspirations mentioned
 
-Examples of good titles:
-- "Product Feature User Onboarding"
-- "Marketing Campaign Social Media"
-- "Design System Color Palette"
-- "App Redesign Navigation Flow"
-- "Content Strategy Blog Topics"
-
-Examples of bad titles:
-- "Brainstorming product ideas" (too generic, includes prefix)
-- "Ideas: User Onboarding" (contains colon)
-- "Just thinking about features" (filler words)
-- "2025-01-15 Brainstorm" (contains date)
+When generating titles:
+- Maximum 60 characters, title case, no colons or quotes
+- Focus on the problem or creative direction being explored
+- Include domain if relevant (Product, Marketing, Design, Feature)
 
 Transcription:
-{transcription}
-
-Generate the title now:`,
+{transcription}`,
     },
 };
 
@@ -298,4 +219,24 @@ export function getPromptById(
 
     const custom = config.customPrompts.find((p) => p.id === id);
     return custom?.prompt || null;
+}
+
+/**
+ * Get the enhancement context for a given prompt config.
+ * For built-in presets, returns the preset's prompt (which contains the analysis focus areas).
+ * For custom prompts, returns the custom prompt text as context.
+ */
+export function getEnhancementContext(config: PromptConfiguration): string {
+    const id = config.selectedPrompt;
+
+    if (id in PROMPT_PRESETS) {
+        return PROMPT_PRESETS[id as PromptPreset].prompt;
+    }
+
+    const custom = config.customPrompts.find((p) => p.id === id);
+    if (custom?.prompt) {
+        return custom.prompt;
+    }
+
+    return PROMPT_PRESETS.default.prompt;
 }

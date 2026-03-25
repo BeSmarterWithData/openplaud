@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Sparkles } from "lucide-react";
+import { BookOpen, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -29,14 +29,24 @@ export function SummaryPanel({
                         <BookOpen className="w-5 h-5" />
                         Summary
                     </CardTitle>
-                    {hasTranscription && !summary && !isEnhancing && (
+                    {hasTranscription && !isEnhancing && (
                         <Button
                             onClick={onEnhance}
                             size="sm"
+                            variant={summary ? "outline" : "default"}
                             disabled={isEnhancing}
                         >
-                            <Sparkles className="w-4 h-4 mr-2" />
-                            Generate Summary
+                            {summary ? (
+                                <>
+                                    <RefreshCw className="w-4 h-4 mr-2" />
+                                    Regenerate
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles className="w-4 h-4 mr-2" />
+                                    Generate Summary
+                                </>
+                            )}
                         </Button>
                     )}
                 </div>
@@ -64,13 +74,9 @@ export function SummaryPanel({
                 ) : hasTranscription ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center">
                         <BookOpen className="w-10 h-10 text-muted-foreground mb-3" />
-                        <p className="text-sm text-muted-foreground mb-4">
+                        <p className="text-sm text-muted-foreground">
                             No summary generated yet
                         </p>
-                        <Button onClick={onEnhance} size="sm">
-                            <Sparkles className="w-4 h-4 mr-2" />
-                            Generate Summary
-                        </Button>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center justify-center py-8 text-center">

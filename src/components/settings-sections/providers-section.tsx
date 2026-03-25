@@ -413,8 +413,8 @@ export function ProvidersSection({
                                         </SelectContent>
                                     </Select>
                                     <p className="text-xs text-muted-foreground">
-                                        Select which prompt to use for title
-                                        generation
+                                        Select which prompt to use for titles,
+                                        summaries, action items, and key points
                                     </p>
                                 </div>
 
@@ -621,7 +621,10 @@ export function ProvidersSection({
                                     : "Create Custom Prompt"}
                             </DialogTitle>
                             <DialogDescription>
-                                Create a custom prompt for title generation. Use{" "}
+                                Create a custom prompt that describes your
+                                recording context. This influences title
+                                generation, summaries, action items, and key
+                                points. Use{" "}
                                 <code className="px-1 py-0.5 bg-muted rounded">
                                     {"{transcription}"}
                                 </code>{" "}
@@ -658,24 +661,27 @@ export function ProvidersSection({
                                                 prompt: e.target.value,
                                             })
                                         }
-                                        placeholder={`You are a title generator for audio recordings. Generate a concise, descriptive title based on the transcription provided.
+                                        placeholder={`Describe the context for your recordings. This will be used for title generation, summaries, action items, and key points.
 
-RULES (MUST FOLLOW):
-1. Maximum 60 characters (strict limit)
-2. No quotes, colons, semicolons, or special punctuation marks
-3. Use title case (capitalize important words)
-4. Focus on the main topic, subject, or action discussed
-5. Remove filler words, greetings, and conversational fluff
-6. Be specific and descriptive, not generic
-7. If the transcription is very short or unclear, create a meaningful title based on context
-8. Do not include timestamps, dates, or metadata
-9. Do not use phrases like "Recording about" or "Discussion of"
-10. Return ONLY the title text, nothing else
+Example for a Senior Data Engineer:
+
+I am a Senior Data Engineer at a tech company. My recordings are primarily:
+- Technical team meetings about data pipeline architecture
+- Stand-ups discussing ETL/ELT processes, Spark workloads, and data quality
+- 1:1s with my manager about project status and career development
+- Design reviews for schema changes and infrastructure decisions
+
+Focus on:
+- Technical decisions and architecture choices
+- Action items with owners and deadlines (format: [Owner] - Task)
+- Pipeline names, service names, and ticket numbers
+- Performance metrics, SLAs, and cost figures
+- Blockers, risks, and cross-team dependencies
+
+For titles, use title case, max 60 characters, no colons or quotes.
 
 Transcription:
-{transcription}
-
-Generate the title now:`}
+{transcription}`}
                                     />
                                 </div>
                                 <div className="flex justify-end gap-2">

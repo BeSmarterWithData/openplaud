@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic, RefreshCw, Settings } from "lucide-react";
+import { Mic, RefreshCw, Settings, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -17,8 +17,10 @@ import {
 } from "@/lib/notifications/browser";
 import { getSyncSettings, SYNC_CONFIG } from "@/lib/sync-config";
 import type { Recording } from "@/types/recording";
+import { ActionItemsPanel } from "./action-items-panel";
 import { RecordingList } from "./recording-list";
 import { RecordingPlayer } from "./recording-player";
+import { SummaryPanel } from "./summary-panel";
 import { TranscriptionPanel } from "./transcription-panel";
 
 interface TranscriptionData {
@@ -26,17 +28,31 @@ interface TranscriptionData {
     language?: string;
 }
 
+interface EnhancementData {
+    summary?: string;
+    actionItems?: string[];
+    keyPoints?: string[];
+    provider?: string;
+    model?: string;
+}
+
 interface WorkstationProps {
     recordings: Recording[];
     transcriptions: Map<string, TranscriptionData>;
+    enhancements: Map<string, EnhancementData>;
 }
 
-export function Workstation({ recordings, transcriptions }: WorkstationProps) {
+export function Workstation({
+    recordings,
+    transcriptions,
+    enhancements,
+}: WorkstationProps) {
     const router = useRouter();
     const [currentRecording, setCurrentRecording] = useState<Recording | null>(
         recordings.length > 0 ? recordings[0] : null,
     );
     const [isTranscribing, setIsTranscribing] = useState(false);
+    const [isEnhancing, setIsEnhancing] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [onboardingOpen, setOnboardingOpen] = useState(false);
     const [providers, setProviders] = useState<
@@ -60,9 +76,21 @@ export function Workstation({ recordings, transcriptions }: WorkstationProps) {
     const [notificationPrefs, setNotificationPrefs] = useState<{
         browserNotifications: boolean;
     } | null>(null);
+    const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+    const [batchProgress, setBatchProgress] = useState<{
+        completed: number;
+        total: number;
+        current: string;
+        step: string;
+        failed: number;
+    } | null>(null);
 
     const currentTranscription = currentRecording
         ? transcriptions.get(currentRecording.id)
+        : undefined;
+
+    const currentEnhancement = currentRecording
+        ? enhancements.get(currentRecording.id)
         : undefined;
 
     useEffect(() => {
@@ -174,6 +202,100 @@ export function Workstation({ recordings, transcriptions }: WorkstationProps) {
         }
     }, [currentRecording, router]);
 
+    const handleEnhance = useCallback(async () => {
+        if (!currentRecording) return;
+
+        setIsEnhancing(true);
+        try {
+            const response = await fetch(
+                `/api/recordings/${currentRecording.id}/enhance`,
+                {
+                    method: "POST",
+                },
+            );
+
+            if (response.ok) {
+                toast.success("Summary and action items generated");
+                router.refresh();
+            } else {
+                const error = await response.json();
+                toast.error(error.error || "Enhancement failed");
+            }
+        } catch {
+            toast.error("Failed to generate summary");
+        } finally {
+            setIsEnhancing(false);
+        }
+    }, [currentRecording, router]);
+
+    const remainingCount = recordings.filter(
+        (r) => !transcriptions.has(r.id) || !enhancements.has(r.id),
+    ).length;
+
+    // Poll for active batch job on mount and when batch state changes
+    useEffect(() => {
+        let interval: ReturnType<typeof setInterval> | null = null;
+
+        const pollStatus = async () => {
+            try {
+                const res = await fetch("/api/recordings/transcribe-all");
+                if (!res.ok) return;
+                const data = await res.json();
+
+                if (data.active) {
+                    setIsBatchProcessing(true);
+                    setBatchProgress({
+                        completed: data.completed || 0,
+                        total: data.total || 0,
+                        current: data.current || "",
+                        step: data.step || "",
+                        failed: data.failed || 0,
+                    });
+                } else if (isBatchProcessing) {
+                    // Job just finished
+                    setIsBatchProcessing(false);
+                    setBatchProgress(null);
+                    if (data.status === "done") {
+                        const msg =
+                            data.failed > 0
+                                ? `Completed ${data.completed}/${data.completed + data.failed} (${data.failed} failed)`
+                                : `All ${data.completed} recordings processed`;
+                        toast.success(msg);
+                    }
+                    router.refresh();
+                }
+            } catch {}
+        };
+
+        pollStatus();
+        interval = setInterval(pollStatus, 3000);
+
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [isBatchProcessing, router]);
+
+    const handleBatchProcess = useCallback(async () => {
+        setIsBatchProcessing(true);
+        setBatchProgress(null);
+
+        try {
+            const response = await fetch("/api/recordings/transcribe-all", {
+                method: "POST",
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                toast.error(err.error || "Failed to start batch processing");
+                setIsBatchProcessing(false);
+            }
+            // Polling will pick up progress from here
+        } catch {
+            toast.error("Failed to start batch processing");
+            setIsBatchProcessing(false);
+        }
+    }, []);
+
     return (
         <>
             <div className="bg-background">
@@ -213,6 +335,29 @@ export function Workstation({ recordings, transcriptions }: WorkstationProps) {
                                     </>
                                 )}
                             </Button>
+                            {remainingCount > 0 && (
+                                <Button
+                                    onClick={handleBatchProcess}
+                                    disabled={isBatchProcessing}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-9"
+                                >
+                                    {isBatchProcessing ? (
+                                        <>
+                                            <Sparkles className="w-4 h-4 mr-2 animate-pulse" />
+                                            {batchProgress
+                                                ? `${batchProgress.completed}/${batchProgress.total}`
+                                                : "Starting..."}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles className="w-4 h-4 mr-2" />
+                                            Process All ({remainingCount})
+                                        </>
+                                    )}
+                                </Button>
+                            )}
                             <Button
                                 onClick={() => setSettingsOpen(true)}
                                 variant="outline"
@@ -222,6 +367,37 @@ export function Workstation({ recordings, transcriptions }: WorkstationProps) {
                             </Button>
                         </div>
                     </div>
+
+                    {/* Batch processing progress bar */}
+                    {isBatchProcessing && batchProgress && (
+                        <div className="mb-6 p-4 border rounded-lg bg-muted/50">
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-sm font-medium">
+                                    {batchProgress.step === "transcribing"
+                                        ? "Transcribing"
+                                        : "Summarizing"}
+                                    :{" "}
+                                    <span className="text-muted-foreground truncate inline-block max-w-[300px] align-bottom">
+                                        {batchProgress.current}
+                                    </span>
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    {batchProgress.completed} /{" "}
+                                    {batchProgress.total}
+                                    {batchProgress.failed > 0 &&
+                                        ` (${batchProgress.failed} failed)`}
+                                </p>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-2">
+                                <div
+                                    className="bg-primary h-2 rounded-full transition-all duration-300"
+                                    style={{
+                                        width: `${batchProgress.total > 0 ? (batchProgress.completed / batchProgress.total) * 100 : 0}%`,
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     {recordings.length === 0 ? (
                         <Card>
@@ -292,6 +468,29 @@ export function Workstation({ recordings, transcriptions }: WorkstationProps) {
                                             transcription={currentTranscription}
                                             isTranscribing={isTranscribing}
                                             onTranscribe={handleTranscribe}
+                                        />
+                                        <SummaryPanel
+                                            summary={
+                                                currentEnhancement?.summary
+                                            }
+                                            provider={
+                                                currentEnhancement?.provider
+                                            }
+                                            model={currentEnhancement?.model}
+                                            hasTranscription={
+                                                !!currentTranscription?.text
+                                            }
+                                            isEnhancing={isEnhancing}
+                                            onEnhance={handleEnhance}
+                                        />
+                                        <ActionItemsPanel
+                                            actionItems={
+                                                currentEnhancement?.actionItems
+                                            }
+                                            keyPoints={
+                                                currentEnhancement?.keyPoints
+                                            }
+                                            isEnhancing={isEnhancing}
                                         />
                                     </>
                                 ) : (

@@ -102,16 +102,10 @@ export async function generateTitleFromTranscription(
             model = "gpt-4o-mini";
         }
 
-        // Truncate transcription if too long (to save tokens)
-        const maxTranscriptionLength = 2000;
-        const truncatedTranscription =
-            transcriptionText.length > maxTranscriptionLength
-                ? `${transcriptionText.substring(0, maxTranscriptionLength)}...`
-                : transcriptionText;
-
-        const prompt = promptTemplate.replace(
+        // Send full transcription — let the model's context window be the limit
+        const systemContent = promptTemplate.replace(
             "{transcription}",
-            truncatedTranscription,
+            transcriptionText,
         );
 
         const response = await openai.chat.completions.create({
@@ -119,16 +113,16 @@ export async function generateTitleFromTranscription(
             messages: [
                 {
                     role: "system",
-                    content:
-                        "You are a helpful assistant that generates concise, descriptive titles for audio recordings based on transcriptions. Always follow the rules strictly.",
+                    content: systemContent,
                 },
                 {
                     role: "user",
-                    content: prompt,
+                    content:
+                        "Generate a concise, descriptive title for this recording. Maximum 60 characters, title case, no colons or quotes. Return ONLY the title text, nothing else.",
                 },
             ],
             temperature: 0.7,
-            max_tokens: 50, // Titles should be short
+            max_completion_tokens: 50,
         });
 
         const title = response.choices[0]?.message?.content?.trim() || null;

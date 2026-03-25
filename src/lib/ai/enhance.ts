@@ -1,8 +1,18 @@
 import { and, eq } from "drizzle-orm";
 import { OpenAI } from "openai";
 import { db } from "@/db";
-import { aiEnhancements, apiCredentials, transcriptions } from "@/db/schema";
+import {
+    aiEnhancements,
+    apiCredentials,
+    transcriptions,
+    userSettings,
+} from "@/db/schema";
 import { decrypt } from "@/lib/encryption";
+import {
+    getDefaultPromptConfig,
+    getEnhancementContext,
+    type PromptConfiguration,
+} from "./prompt-presets";
 
 export interface EnhancementResult {
     summary: string;
@@ -12,34 +22,54 @@ export interface EnhancementResult {
     model: string;
 }
 
-const ENHANCEMENT_SYSTEM_PROMPT = `You are an expert assistant that analyzes audio recording transcriptions. You produce structured analysis with three sections: a summary, action items, and key points.
+function buildSystemPrompt(
+    promptText: string,
+    transcriptionText: string,
+): string {
+    // Send the full transcription — let the model's context window be the limit
+    const contextWithTranscription = promptText.replace(
+        "{transcription}",
+        transcriptionText,
+    );
 
-You MUST respond with valid JSON only. No markdown, no code fences, no extra text.
+    return `${contextWithTranscription}
+
+Based on the above context and transcription, produce a comprehensive, detailed analysis. You MUST respond with valid JSON only. No markdown, no code fences, no extra text.
 
 Response format:
 {
-  "summary": "A clear, concise paragraph summarizing the main topics and conclusions of the recording.",
-  "actionItems": ["Action item 1", "Action item 2"],
-  "keyPoints": ["Key point 1", "Key point 2"]
+  "summary": "A thorough paragraph...",
+  "actionItems": ["Detailed action item 1", "Detailed action item 2"],
+  "keyPoints": ["Detailed key point with explanation 1", "Detailed key point with explanation 2"]
 }
 
-Rules:
-- The summary should be 2-4 sentences capturing the essence of the conversation.
-- Action items are specific tasks, follow-ups, or commitments mentioned. If none exist, return an empty array.
-- Key points are the most important facts, decisions, or insights discussed. Extract 3-7 key points.
-- Be specific and actionable—avoid vague summaries.
-- Preserve important names, dates, numbers, and deadlines mentioned.
-- Return ONLY the JSON object, nothing else.`;
+SUMMARY RULES:
+- Write a comprehensive paragraph (5-10 sentences) that captures the full scope of the recording.
+- Include the main purpose/objective, all major topics covered, key decisions or conclusions, and the overall arc.
+- Mention specific names, technical terms, frameworks, and methodologies discussed.
+- A reader should understand everything important that happened without reading the full transcription.
 
-function buildUserPrompt(transcriptionText: string): string {
-    // Truncate long transcriptions to stay within token limits
-    const maxLength = 8000;
-    const truncated =
-        transcriptionText.length > maxLength
-            ? `${transcriptionText.substring(0, maxLength)}...\n\n[Transcription truncated for length]`
-            : transcriptionText;
+ACTION ITEMS RULES:
+- Extract EVERY task, assignment, follow-up, commitment, or recommended next step mentioned.
+- Include implicit actions (e.g., "we should look into X" → "Investigate X").
+- Include who is responsible when mentioned (format: "[Owner] - Task description").
+- Include deadlines, timeframes, or priority when mentioned.
+- Include recommendations and suggestions made by speakers, even if not formally assigned.
+- If the recording is educational, extract study tasks, review assignments, and things to practice.
+- If no action items exist, return an empty array.
 
-    return `Analyze the following transcription and provide a structured summary, action items, and key points.\n\nTranscription:\n${truncated}`;
+KEY POINTS RULES:
+- Extract ALL substantive knowledge points, not just surface-level observations.
+- Each key point should be a detailed sentence or two explaining the concept, decision, or insight—not just a topic label.
+- Group related details into single key points rather than splitting them into shallow bullets.
+- Include technical details: specific functions, tools, frameworks, methodologies, metrics, and examples discussed.
+- Include context and rationale—WHY something is important, not just WHAT was said.
+- Include specific examples, case studies, or scenarios that were walked through.
+- Include any problems discussed and their solutions.
+- Aim for 10-25 detailed key points depending on the recording length and density.
+- Preserve exact names, numbers, technical terms, and references.
+
+Return ONLY the JSON object, nothing else.`;
 }
 
 export async function enhanceRecording(
@@ -58,6 +88,26 @@ export async function enhanceRecording(
             "No transcription available. Please transcribe the recording first.",
         );
     }
+
+    // Get user's prompt configuration (shared with title generation)
+    const [userSettingsRow] = await db
+        .select()
+        .from(userSettings)
+        .where(eq(userSettings.userId, userId))
+        .limit(1);
+
+    let promptConfig: PromptConfiguration = getDefaultPromptConfig();
+    if (userSettingsRow?.titleGenerationPrompt) {
+        const config =
+            userSettingsRow.titleGenerationPrompt as PromptConfiguration;
+        promptConfig = {
+            selectedPrompt: config.selectedPrompt || "default",
+            customPrompts: config.customPrompts || [],
+        };
+    }
+
+    const promptText = getEnhancementContext(promptConfig);
+    const systemPrompt = buildSystemPrompt(promptText, transcription.text);
 
     // Get user's AI credentials (prefer enhancement provider, fallback to transcription)
     const [enhancementCredentials] = await db
@@ -106,11 +156,15 @@ export async function enhanceRecording(
     const response = await openai.chat.completions.create({
         model,
         messages: [
-            { role: "system", content: ENHANCEMENT_SYSTEM_PROMPT },
-            { role: "user", content: buildUserPrompt(transcription.text) },
+            { role: "system", content: systemPrompt },
+            {
+                role: "user",
+                content:
+                    "Analyze the transcription above and return the JSON with summary, actionItems, and keyPoints.",
+            },
         ],
         temperature: 0.3,
-        max_tokens: 1500,
+        max_completion_tokens: 4096,
     });
 
     const content = response.choices[0]?.message?.content?.trim();

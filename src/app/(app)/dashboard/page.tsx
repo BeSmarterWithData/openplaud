@@ -1,7 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { Workstation } from "@/components/dashboard/workstation";
 import { db } from "@/db";
-import { recordings, transcriptions } from "@/db/schema";
+import { aiEnhancements, recordings, transcriptions } from "@/db/schema";
 import { requireAuth } from "@/lib/auth-server";
 import { serializeRecording } from "@/types/recording";
 
@@ -30,6 +30,18 @@ export default async function DashboardPage() {
         .from(transcriptions)
         .where(eq(transcriptions.userId, session.user.id));
 
+    const userEnhancements = await db
+        .select({
+            recordingId: aiEnhancements.recordingId,
+            summary: aiEnhancements.summary,
+            actionItems: aiEnhancements.actionItems,
+            keyPoints: aiEnhancements.keyPoints,
+            provider: aiEnhancements.provider,
+            model: aiEnhancements.model,
+        })
+        .from(aiEnhancements)
+        .where(eq(aiEnhancements.userId, session.user.id));
+
     const recordingsData = userRecordings.map(serializeRecording);
 
     const transcriptionMap = new Map(
@@ -39,10 +51,24 @@ export default async function DashboardPage() {
         ]),
     );
 
+    const enhancementMap = new Map(
+        userEnhancements.map((e) => [
+            e.recordingId,
+            {
+                summary: e.summary || undefined,
+                actionItems: (e.actionItems as string[]) || undefined,
+                keyPoints: (e.keyPoints as string[]) || undefined,
+                provider: e.provider,
+                model: e.model,
+            },
+        ]),
+    );
+
     return (
         <Workstation
             recordings={recordingsData}
             transcriptions={transcriptionMap}
+            enhancements={enhancementMap}
         />
     );
 }
