@@ -4,7 +4,9 @@ import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { ActionItemsPanel } from "@/components/dashboard/action-items-panel";
 import { RecordingPlayer } from "@/components/dashboard/recording-player";
+import { SummaryPanel } from "@/components/dashboard/summary-panel";
 import { TranscriptionPanel } from "@/components/dashboard/transcription-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,17 +18,28 @@ interface Transcription {
     transcriptionType?: string;
 }
 
+interface Enhancement {
+    summary?: string;
+    actionItems?: string[];
+    keyPoints?: string[];
+    provider?: string;
+    model?: string;
+}
+
 interface RecordingWorkstationProps {
     recording: Recording;
     transcription?: Transcription;
+    enhancement?: Enhancement;
 }
 
 export function RecordingWorkstation({
     recording,
     transcription,
+    enhancement,
 }: RecordingWorkstationProps) {
     const router = useRouter();
     const [isTranscribing, setIsTranscribing] = useState(false);
+    const [isEnhancing, setIsEnhancing] = useState(false);
 
     const handleTranscribe = useCallback(async () => {
         setIsTranscribing(true);
@@ -51,6 +64,32 @@ export function RecordingWorkstation({
             setIsTranscribing(false);
         }
     }, [recording.id, router]);
+
+    const handleEnhance = useCallback(async () => {
+        setIsEnhancing(true);
+        try {
+            const response = await fetch(
+                `/api/recordings/${recording.id}/enhance`,
+                {
+                    method: "POST",
+                },
+            );
+
+            if (response.ok) {
+                toast.success("Summary and action items generated");
+                router.refresh();
+            } else {
+                const error = await response.json();
+                toast.error(error.error || "Enhancement failed");
+            }
+        } catch {
+            toast.error("Failed to generate summary");
+        } finally {
+            setIsEnhancing(false);
+        }
+    }, [recording.id, router]);
+
+    const hasTranscription = !!transcription?.text;
 
     return (
         <div className="bg-background">
@@ -82,6 +121,23 @@ export function RecordingWorkstation({
                         transcription={transcription}
                         isTranscribing={isTranscribing}
                         onTranscribe={handleTranscribe}
+                    />
+
+                    {/* Summary */}
+                    <SummaryPanel
+                        summary={enhancement?.summary}
+                        provider={enhancement?.provider}
+                        model={enhancement?.model}
+                        hasTranscription={hasTranscription}
+                        isEnhancing={isEnhancing}
+                        onEnhance={handleEnhance}
+                    />
+
+                    {/* Action Items & Key Points */}
+                    <ActionItemsPanel
+                        actionItems={enhancement?.actionItems}
+                        keyPoints={enhancement?.keyPoints}
+                        isEnhancing={isEnhancing}
                     />
 
                     {/* Metadata */}
