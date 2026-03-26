@@ -2,6 +2,7 @@ import { render } from "@react-email/render";
 import nodemailer from "nodemailer";
 import React from "react";
 import { env } from "@/lib/env";
+import { EnhancementEmail } from "./email-templates/enhancement-email";
 import { NewRecordingEmail } from "./email-templates/new-recording-email";
 import { TestEmail } from "./email-templates/test-email";
 
@@ -188,6 +189,57 @@ Manage notifications: ${settingsUrl}
     `.trim();
 
     await sendEmailWithError({
+        to: email,
+        subject,
+        html,
+        text,
+    });
+}
+
+export async function sendEnhancementEmail(
+    email: string,
+    recordingName: string,
+    summary: string,
+    actionItems: string[],
+    keyPoints: string[],
+): Promise<boolean> {
+    const baseUrl = env.APP_URL;
+    const dashboardUrl = `${baseUrl}/dashboard`;
+
+    const subject = `📝 ${recordingName}`;
+
+    const html = await render(
+        React.createElement(EnhancementEmail, {
+            recordingName,
+            summary,
+            actionItems,
+            keyPoints,
+            dashboardUrl,
+        }),
+    );
+
+    const actionItemsText =
+        actionItems.length > 0
+            ? `\nAction Items:\n${actionItems.map((item) => `  • ${item}`).join("\n")}`
+            : "";
+
+    const keyPointsText =
+        keyPoints.length > 0
+            ? `\nKey Points:\n${keyPoints.map((point) => `  • ${point}`).join("\n")}`
+            : "";
+
+    const text = `
+${recordingName}
+
+Summary:
+${summary}
+${actionItemsText}
+${keyPointsText}
+
+View in OpenPlaud: ${dashboardUrl}
+    `.trim();
+
+    return sendEmail({
         to: email,
         subject,
         html,
